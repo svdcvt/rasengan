@@ -53,11 +53,24 @@ def lowres_stft(wave, rate_div, win_length=32, hop_length=8, hann=False, T=None,
     return stft[...,:T,:] if T is not None else stft
 
 def wav_to_wav(wav_path, G, power=2, T=32):
+    # takes wav, makes lowres downsampling, predicts highres (itself)
     rate, wav = wavfile.read(wav_path)
     lowres_m, lowres_p = torchaudio.functional.magphase(lowres_stft(wav, 2))
     art_phase = get_art_phase(lowres_p)
     lf_lps = lps(lowres_m, power)
-    fullres_wav = full_lps(torch.tensor(wav), T=None)
+    lowres_wav_parts = torch.stack(torch.split(lf_lps, T, dim=-1)[:-1])
+    highres_wav_parts = G(lowres_wav_parts)
+    pred_mag = torch.cat([*torch.cat([lowres_wav_parts, highres_wav_parts], dim=1)], dim=1)
+    pred_stft = from_mag_phase(pred_mag, art_phase)
+    pred_audio = torchaudio.functional.istft(pred_stft, **spec_kwargs)
+    wavfile.write('gen_' + wav_path, rate, pred_audio.numpy())
+
+def noisy_to_clean(wav_path, G, power=2, T=32):
+    # takes noisy wav, predicts without noise
+    rate, wav = wavfile.read(wav_path)
+    full_m, full_p = torchaudio.functional.magphase(full_stft(wav))
+    art_phase = get_art_phase(full_p[:129]) # ?
+    lf_lps = lps(full_m[:129], power)
     lowres_wav_parts = torch.stack(torch.split(lf_lps, T, dim=-1)[:-1])
     highres_wav_parts = G(lowres_wav_parts)
     pred_mag = torch.cat([*torch.cat([lowres_wav_parts, highres_wav_parts], dim=1)], dim=1)
