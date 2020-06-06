@@ -42,17 +42,15 @@ def lowres_lps(wave, rate_div, win_length=32, hop_length=8, hann=False, power=2.
 
 ###########
 
-def full_stft():
-    
-def lowres_m_p(wave, rate_div, win_length=32, hop_length=8, hann=False, T=None, rate=16000):
+def lowres_stft(wave, rate_div, win_length=32, hop_length=8, hann=False, T=None, rate=16000):
+    win=lambda x: torch.ones(x) if not hann else torch.hann_window(x)
     if isinstance(wave, torch.Tensor):
         wave = wave.numpy()
     wave = resampy.resample(wave, rate, rate // rate_div, axis=-1, filter='sinc_window', num_zeros=64)
     wave = torch.tensor(wave)
-    spec = torchaudio.functional.spectrogram(wave, pad=pad, window=win(win_length), n_fft=(129 * 2) - 1, 
-                                      hop_length=hop_length // rate_div, win_length=win_length, 
-                                      power=power, normalized=False)
-    return lps(spec)[...,:T] if T is not None else lps(spec)
+    stft = torch.stft(wave, window=win(win_length), n_fft=((129) * 2) - 1, 
+                      hop_length=hop_length // rate_div, win_length=win_length)
+    return stft[...,:T,:] if T is not None else stft
 
 def wav_to_wav(wav_path, G, power=2, T=32):
     rate, wav = wavfile.read(wav_path)
